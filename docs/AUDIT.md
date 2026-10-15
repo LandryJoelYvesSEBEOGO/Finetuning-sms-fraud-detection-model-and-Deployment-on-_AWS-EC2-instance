@@ -123,37 +123,31 @@ interface-web/          index.html, styles.css, server.py (http.server), Dockerf
 
 ---
 
-## 7. Feuille de route proposée vers un POC déployable
+## 7. Feuille de route vers un POC déployable
 
-### Phase 0 — Cadrage (décisions à prendre)
-1. **Cible** : spam générique ou **arnaque/smishing** ? Quelle langue (FR, EN, les deux) ?
-2. **Données** : UCI SMS Spam (EN), complété par des datasets de smishing publics et un jeu FR (collecte, synthèse ou annotation).
-3. **Cible de déploiement** : rester sur EC2 (simple, peu cher) ou passer à ECS Fargate / App Runner ?
+### Décisions de cadrage (validées)
+- **Cible** : détection de **fraude** par SMS (pas de spam générique).
+- **Langue** : anglais (textes et dataset).
+- **Hébergement** : **Vercel** (frontend statique + fonction Python serverless).
 
-### Phase 1 — ML reproductible (priorité absolue)
-- Dossier `training/` : préparation des données, script d'entraînement (config versionnée), évaluation (precision, recall, F1, matrice de confusion, seuil choisi sur le recall fraude).
-- Baseline TF-IDF + LogReg pour justifier le transformer.
-- Modèle multilingue si FR (`distilbert-base-multilingual-cased`, `xlm-roberta-base` ou `camembert`).
-- Model card remplie, `id2label` dans la config, révision HF épinglée, fusion LoRA (`merge_and_unload`) pour l'inférence.
-- Option perf : export ONNX + quantization int8, qui divise l'image et la latence CPU.
+### Conséquence d'architecture : Vercel impose une inférence légère
+Les fonctions Python Vercel ont une taille de bundle limitée, et PyTorch (plusieurs centaines de Mo) n'y tient pas.
+L'inférence en production passera donc par **ONNX Runtime** (modèle LoRA fusionné, exporté en ONNX puis quantifié en int8, ≈ 70 Mo).
+PyTorch reste utilisé pour l'entraînement et l'export.
 
-### Phase 2 — API robuste
-- Python 3.12, stack à jour (FastAPI + pydantic v2, transformers/peft récents, alignés avec l'entraînement), lockfile (`uv`).
-- Schéma de réponse : `{label, is_fraud, score, model_version, latency_ms}` ; endpoint `/v1/predict` (+ batch).
-- `truncation=True`, validation (1 à 2000 caractères), inférence en threadpool, chargement via `lifespan`.
-- `/health` + `/ready`, logs JSON, métriques Prometheus, clé API et rate limiting.
-- Modèle intégré à l'image (ou volume de cache), mode offline.
+```
+Vercel
+├── frontend statique (HTML/CSS/JS)    → /
+└── fonction Python FastAPI            → /api/v1/predict
+        └── ONNX Runtime + tokenizers  ← modèle int8 (Hugging Face Hub, révision épinglée)
+```
 
-### Phase 3 — Frontend digne d'une démo
-- Affichage verdict + jauge de confiance + code couleur, exemples cliquables, état de chargement, gestion d'erreurs propre, i18n FR/EN, accessibilité.
-- Statique servi par nginx (suppression du conteneur `web`) ; éventuellement Vite + framework léger si l'UI grossit.
+### Phases (une pull request par phase, petits commits)
 
-### Phase 4 — Qualité & CI/CD
-- pytest (unitaires avec modèle mocké + test d'intégration sur un mini-jeu de référence), ruff, mypy.
-- GitHub Actions : lint, tests, build et scan d'image (Trivy), push vers ECR, déploiement.
-
-### Phase 5 — Déploiement AWS
-- IaC (Terraform) : instance, SG minimal (pas de SSH ouvert, SSM à la place), Elastic IP, IAM.
-- TLS : Caddy (certificats automatiques) ou ALB + ACM. Nom de domaine.
-- CloudWatch logs/alarmes, sauvegarde de la config.
-- README réécrit, fidèle à la réalité, avec architecture, métriques du modèle et limites.
+| Phase | Contenu | Corrige |
+|---|---|---|
+| **1. Fiabilisation backend** | Package `sms_fraud/`, contrat d'API `/v1` (label + score), validation, troncature, inférence non bloquante, `/health` et `/ready`, config par variables d'environnement, CORS restreint, stack Python 3.12 alignée sur l'entraînement, tests pytest, lint ruff, CI GitHub Actions | B1–B11, M4, M5, F1, I3, I6–I8 |
+| **2. ML reproductible** | `training/` : préparation du dataset anglais de fraude, entraînement LoRA, évaluation (precision/recall/F1, matrice de confusion, choix du seuil), baseline TF-IDF, model card | M1, M6, M7 |
+| **3. Inférence ONNX** | Fusion LoRA, export ONNX, quantification int8, backend `onnx` de l'API, vérification de parité avec PyTorch | Compatibilité Vercel |
+| **4. Frontend** | Nouvelle UI : verdict, jauge de confiance, exemples, états de chargement et d'erreur, accessibilité | F2–F6 |
+| **5. Déploiement Vercel** | `vercel.json`, fonction Python, déploiements de preview par PR, suppression de Docker/nginx/EC2, README fidèle | I1, I2, I4, I5, I9, doc |
