@@ -1,1 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# ML artifacts
+models/
+artifacts/
+data/raw/
+mlruns/
+
+# Editors / tools
+.vscode/
+.idea/
 .qodo
+.DS_Store

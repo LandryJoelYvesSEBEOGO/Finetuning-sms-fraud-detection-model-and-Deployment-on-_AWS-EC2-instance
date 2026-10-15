@@ -43,44 +43,41 @@
     </div>
 
     <script>
-        document.getElementById('analyzeButton').addEventListener('click', async () => {
-            const smsText = document.getElementById('smsInput').value;
+        const analyzeButton = document.getElementById('analyzeButton');
+
+        analyzeButton.addEventListener('click', async () => {
+            const smsText = document.getElementById('smsInput').value.trim();
             const resultText = document.getElementById('resultText');
-            
+
             if (!smsText) {
                 resultText.textContent = 'Veuillez entrer un message à analyser.';
                 return;
             }
 
+            analyzeButton.disabled = true;
+            resultText.textContent = 'Analyse en cours...';
             try {
-                resultText.textContent = 'Analyse en cours...';
                 const apiUrl = '${API_URL}';
-                console.log('Envoi de la requête à:', `${apiUrl}/predict`);
-                
-                const response = await fetch(`${apiUrl}/predict`, {
+                const response = await fetch(`${apiUrl}/v1/predict`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({ message: smsText })
                 });
 
-                console.log('Statut de la réponse:', response.status);
-                console.log('Headers de la réponse:', Object.fromEntries(response.headers.entries()));
-
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Erreur de réponse:', errorText);
-                    throw new Error(`Erreur HTTP: ${response.status} - ${errorText}`);
+                    throw new Error(`Erreur HTTP ${response.status}`);
                 }
 
-                const result = await response.text();
-                console.log('Résultat reçu:', result);
-                resultText.textContent = result;
+                const result = await response.json();
+                const score = Math.round(result.fraud_score * 100);
+                resultText.textContent = result.is_fraud
+                    ? `⚠️ Fraude probable (score de fraude : ${score} %)`
+                    : `✅ Message légitime (score de fraude : ${score} %)`;
             } catch (error) {
-                console.error('Erreur détaillée:', error);
-                resultText.textContent = `Une erreur est survenue: ${error.message}`;
+                console.error(error);
+                resultText.textContent = `Une erreur est survenue : ${error.message}`;
+            } finally {
+                analyzeButton.disabled = false;
             }
         });
     </script>

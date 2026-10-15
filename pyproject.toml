@@ -1,0 +1,19 @@
+[project]
+name = "sms-fraud-detection"
+version = "0.2.0"
+description = "SMS fraud detection API based on a LoRA fine-tuned DistilBERT"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Legacy static server, replaced in the frontend phase.
+extend-exclude = ["interface-web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["model: tests that build and run a tiny local transformer model (slower)"]

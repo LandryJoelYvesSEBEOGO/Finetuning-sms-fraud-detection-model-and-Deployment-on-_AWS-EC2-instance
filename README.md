@@ -90,15 +90,30 @@ docker-compose up --build
 
 ## ⚙️ Configuration
 
-### Environment Variables
+The API is configured with environment variables prefixed with `SMS_FRAUD_`:
 
-**API Service**:
-- `PYTHONUNBUFFERED=1`: Activates unbuffered logging
-- `HOST=0.0.0.0`: Listening interface
+| Variable | Default | Description |
+|---|---|---|
+| `SMS_FRAUD_BASE_MODEL` | `distilbert-base-uncased` | Base model |
+| `SMS_FRAUD_ADAPTER_REPO` | `MrNWARMeilleur/sms_fraud_detection` | LoRA adapter (Hub repo or local path) |
+| `SMS_FRAUD_ADAPTER_REVISION` | pinned commit | Adapter revision |
+| `SMS_FRAUD_THRESHOLD` | `0.5` | Minimum fraud probability to flag a message |
+| `SMS_FRAUD_MAX_TOKENS` | `512` | Truncation length |
+| `SMS_FRAUD_CORS_ORIGINS` | `[]` | Allowed origins, JSON list (empty = same-origin only) |
+| `SMS_FRAUD_DOCS_ENABLED` | `true` | Expose `/docs` and `/openapi.json` |
+| `SMS_FRAUD_LOG_LEVEL` | `INFO` | Log level |
 
-**Web Service**:
-- `API_URL=/api`: API URL (via Nginx)
-- `HOST=0.0.0.0`: Listening interface
+### Local development
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-dev.txt
+
+python -m sms_fraud                     # API on http://127.0.0.1:8080
+python scripts/smoke_test.py            # smoke test a running instance
+pytest && ruff check . && ruff format --check .
+```
 
 ## 💻 Usage
 
@@ -111,34 +126,48 @@ docker-compose up --build
 
 ```
 .
-├── app.py                 # Main FastAPI application
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # API Dockerfile
-├── docker-compose.yml    # Docker Compose configuration
-├── nginx.conf           # Nginx configuration
-├── interface-web/
-│   ├── index.html       # Main web page
-│   ├── styles.css       # CSS styles
-│   ├── server.py        # Python web server
-│   └── Dockerfile       # Web interface Dockerfile
+├── sms_fraud/             # API package
+│   ├── main.py            # FastAPI app factory and routes
+│   ├── predictor.py       # model loading and inference
+│   ├── schemas.py         # request/response models
+│   └── config.py          # environment-based settings
+├── tests/                 # pytest suite (no network needed)
+├── scripts/smoke_test.py  # end-to-end check of a running instance
+├── interface-web/         # static web page
+├── Dockerfile, docker-compose.yml, nginx.conf
+└── docs/AUDIT.md          # technical audit and roadmap
 ```
 
 ## 📡 API Reference
 
-### Prediction Endpoint
+Interactive documentation is available at `/docs` when enabled.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/ready` | Readiness probe (model loaded) |
+| `POST` | `/v1/predict` | Classify one message (1–2000 characters) |
+| `POST` | `/v1/predict/batch` | Classify up to 32 messages |
 
 ```http
-POST /predict
+POST /v1/predict
 Content-Type: application/json
 
+{"message": "URGENT: your account is locked, verify at http://bit.ly/x"}
+```
+
+```json
 {
-    "message": "your sms message here"
+  "label": "fraud",
+  "is_fraud": true,
+  "fraud_score": 0.982,
+  "threshold": 0.5,
+  "model_version": "MrNWARMeilleur/sms_fraud_detection@2cf2ba0",
+  "latency_ms": 41.7
 }
 ```
 
-Possible responses:
-- `"This message is not a fraud"`
-- `"This message is a fraud"`
+Invalid input (empty, too long, too many messages) returns `422`; `503` means the model is not loaded yet.
 
 ## 🌐 Web Interface
 
