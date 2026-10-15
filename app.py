@@ -28,7 +28,8 @@ class SMSRequest(BaseModel):
 
 @app.post("/predict")
 async def predict(sms: SMSRequest):
-    prediction = classifier(sms.message)
+    # Même longueur max qu'à l'entraînement ; évite le crash au-delà de 512 tokens
+    prediction = classifier(sms.message, truncation=True, max_length=134)
     if prediction[0]['label'] == 'LABEL_0':
         prediction = "This message is not a fraud"
     else:
