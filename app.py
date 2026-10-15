@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 from peft import PeftModel
 import uvicorn
@@ -24,7 +24,7 @@ model = PeftModel.from_pretrained(base_model, "MrNWARMeilleur/sms_fraud_detectio
 classifier = pipeline("text-classification", model=model, tokenizer=tokenizer)
 
 class SMSRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1)
 
 @app.post("/predict")
 async def predict(sms: SMSRequest):
