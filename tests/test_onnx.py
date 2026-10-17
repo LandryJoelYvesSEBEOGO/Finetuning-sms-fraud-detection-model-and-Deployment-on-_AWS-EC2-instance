@@ -76,3 +76,4 @@ def test_cli_exits_zero_and_records_parity(
     assert main(["--output", str(tmp_path)]) == 0
     metadata = json.loads((tmp_path / METADATA_FILE).read_text())
     assert metadata["parity_max_abs_diff"] < 1e-4
+    assert len(metadata["sanity_report"]["rows"]) == 12

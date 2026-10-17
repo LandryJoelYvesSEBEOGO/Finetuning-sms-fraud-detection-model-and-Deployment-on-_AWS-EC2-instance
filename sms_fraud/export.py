@@ -36,6 +36,29 @@ PARITY_SAMPLES = [
     "win " * 600,  # longer than 512 tokens: exercises truncation
 ]
 
+# Hand-labelled examples (True = fraud). Informational only: they never fail the
+# export, they document how the published model behaves on typical messages.
+SANITY_SET = [
+    ("URGENT: Your bank account has been suspended. Verify your details at http://bit.ly/x", True),
+    ("Congratulations! You've won a $1000 gift card. Claim now by replying with your PIN.", True),
+    (
+        "Your package could not be delivered. Pay the $1.99 redelivery fee: http://track-pkg.co",
+        True,
+    ),
+    ("Mom, I lost my phone, this is my new number. Can you send me $200 for rent?", True),
+    ("IRS notice: you owe back taxes. Call 1-800-555-0199 now to avoid arrest.", True),
+    ("Your Netflix payment failed. Update your card within 24h: netflx-billing.com", True),
+    (
+        "FREE entry in 2 a wkly comp to win FA Cup final tkts. Text FA to 87121 to receive entry",
+        True,
+    ),
+    ("Hey, are we still on for lunch tomorrow at 12?", False),
+    ("Reminder: your dentist appointment is on Monday at 9:30am.", False),
+    ("Can you pick up milk on your way home?", False),
+    ("Your Uber is arriving in 3 minutes.", False),
+    ("Happy birthday! Have a great day, see you tonight", False),
+]
+
 
 def export(settings: Settings, output: Path) -> dict:
     import onnxruntime
@@ -114,6 +137,24 @@ def check_parity(settings: Settings, output: Path, samples: list[str] = PARITY_S
     return gap
 
 
+def sanity_report(settings: Settings, output: Path) -> dict:
+    """Score SANITY_SET with the exported model and log a readable table."""
+    predictor = OnnxPredictor(
+        settings.model_copy(update={"onnx_dir": str(output), "onnx_url": None})
+    )
+    texts = [text for text, _ in SANITY_SET]
+    scores = predictor.predict_proba(texts)
+    rows = []
+    for (text, expected), score in zip(SANITY_SET, scores, strict=True):
+        flagged = score >= settings.threshold
+        rows.append({"text": text, "expected_fraud": expected, "fraud_score": round(score, 4)})
+        mark = "ok  " if flagged == expected else "MISS"
+        logger.info("%s expected=%-5s score=%.4f  %s", mark, expected, score, text[:70])
+    agreed = sum((r["fraud_score"] >= settings.threshold) == r["expected_fraud"] for r in rows)
+    logger.info("Sanity set: %d/%d messages classified as expected", agreed, len(rows))
+    return {"threshold": settings.threshold, "agreement": f"{agreed}/{len(rows)}", "rows": rows}
+
+
 def _write_metadata(output: Path, metadata: dict) -> None:
     (output / METADATA_FILE).write_text(json.dumps(metadata, indent=2) + "\n")
 
@@ -129,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     metadata = export(settings, args.output)
     gap = check_parity(settings, args.output)
     metadata["parity_max_abs_diff"] = gap
+    metadata["sanity_report"] = sanity_report(settings, args.output)
     _write_metadata(args.output, metadata)
 
     size_mb = (args.output / MODEL_FILE).stat().st_size / 1e6
