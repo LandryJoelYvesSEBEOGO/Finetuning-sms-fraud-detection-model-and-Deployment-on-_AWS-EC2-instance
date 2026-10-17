@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Sequence
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sms_fraud.config import Settings
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 logger = logging.getLogger(__name__)
 
@@ -22,33 +25,43 @@ class Predictor(Protocol):
         ...
 
 
+def load_merged_model(settings: Settings) -> tuple[PreTrainedTokenizerBase, PreTrainedModel]:
+    """Load the tokenizer and the base model with the LoRA adapter merged in.
+
+    Shared by the PyTorch backend and the ONNX export, so both serve the exact
+    same weights.
+    """
+    from peft import PeftModel
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    logger.info(
+        "Loading model base=%s adapter=%s@%s",
+        settings.base_model,
+        settings.adapter_repo,
+        settings.adapter_revision,
+    )
+    # The adapter repository ships the tokenizer used during training.
+    tokenizer = AutoTokenizer.from_pretrained(
+        settings.adapter_repo, revision=settings.adapter_revision
+    )
+    base = AutoModelForSequenceClassification.from_pretrained(
+        settings.base_model, revision=settings.base_revision, num_labels=2
+    )
+    peft_model = PeftModel.from_pretrained(
+        base, settings.adapter_repo, revision=settings.adapter_revision
+    )
+    # Merging the LoRA weights removes the adapter overhead at inference time.
+    return tokenizer, peft_model.merge_and_unload().eval()
+
+
 class TransformersPredictor:
     """DistilBERT + LoRA adapter, merged and run with PyTorch on CPU."""
 
     def __init__(self, settings: Settings) -> None:
         import torch
-        from peft import PeftModel
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-        logger.info(
-            "Loading model base=%s adapter=%s@%s",
-            settings.base_model,
-            settings.adapter_repo,
-            settings.adapter_revision,
-        )
         self._torch = torch
-        # The adapter repository ships the tokenizer used during training.
-        self._tokenizer = AutoTokenizer.from_pretrained(
-            settings.adapter_repo, revision=settings.adapter_revision
-        )
-        base = AutoModelForSequenceClassification.from_pretrained(
-            settings.base_model, revision=settings.base_revision, num_labels=2
-        )
-        peft_model = PeftModel.from_pretrained(
-            base, settings.adapter_repo, revision=settings.adapter_revision
-        )
-        # Merging the LoRA weights removes the adapter overhead at inference time.
-        self._model = peft_model.merge_and_unload().eval()
+        self._tokenizer, self._model = load_merged_model(settings)
 
         self._max_tokens = settings.max_tokens
         self._fraud_index = settings.fraud_label_index
