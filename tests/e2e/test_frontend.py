@@ -7,6 +7,7 @@ pytestmark = pytest.mark.e2e
 
 
 def test_initial_state(page: Page) -> None:
+    expect(page.locator("h1")).to_have_text("Is this SMS a scam?")
     expect(page.locator("#status")).to_have_class(re.compile("status--ready"))
     expect(page.locator("#result")).to_have_attribute("data-state", "idle")
     expect(page.get_by_label("SMS message (English)")).to_be_visible()
@@ -75,11 +76,13 @@ def test_language_toggle_translates_and_persists(page: Page) -> None:
     expect(page.locator("#verdictText")).to_have_text("Likely fraud")
     page.get_by_role("button", name="Français").click()
     expect(page.locator("html")).to_have_attribute("lang", "fr")
-    expect(page.locator("h1")).to_have_text("Détecteur de fraude SMS")
+    expect(page.locator("h1")).to_have_text("Ce SMS est-il une arnaque ?")
+    expect(page.locator(".brand-name")).to_have_text("Détecteur de fraude SMS")
+    expect(page).to_have_title("Détecteur de fraude SMS")
     # The current verdict is re-rendered in the new language.
     expect(page.locator("#verdictText")).to_have_text("Fraude probable")
     page.reload()
-    expect(page.locator("h1")).to_have_text("Détecteur de fraude SMS")
+    expect(page.locator("h1")).to_have_text("Ce SMS est-il une arnaque ?")
 
 
 def test_mobile_layout_has_no_horizontal_scroll(browser, base_url: str) -> None:
@@ -107,3 +110,35 @@ def test_page_is_served_with_the_production_csp(page: Page, base_url: str) -> No
 
 def test_docs_are_not_blocked_by_the_csp(page: Page, base_url: str) -> None:
     assert "content-security-policy" not in page.request.get(f"{base_url}/docs").headers
+
+
+def test_composer_shows_the_beam_only_while_analyzing(page: Page) -> None:
+    release = []
+    page.route("**/v1/predict", lambda route: release.append(route))
+    page.get_by_label("SMS message (English)").fill("you won")
+    page.get_by_role("button", name="Analyze").click()
+    expect(page.locator("#analyzeForm")).to_have_attribute("aria-busy", "true")
+    expect(page.get_by_role("button", name="Analyze")).to_be_disabled()
+    # The request is held by the route handler until released here.
+    for _ in range(100):
+        if release:
+            break
+        page.wait_for_timeout(20)
+    release[0].continue_()
+    expect(page.locator("#result")).to_have_attribute("data-state", "fraud")
+    expect(page.locator("#analyzeForm")).not_to_have_attribute("aria-busy", "true")
+
+
+def test_meter_reflects_score_and_threshold(page: Page) -> None:
+    page.get_by_role("button", name="Prize claim").click()
+    expect(page.locator("#scoreValue")).to_have_text("97%")
+    meter = page.locator("#meter")
+    assert meter.evaluate("el => el.style.getPropertyValue('--score')") == "97%"
+    assert meter.evaluate("el => el.style.getPropertyValue('--threshold')") == "50%"
+
+
+def test_textarea_grows_with_its_content(page: Page) -> None:
+    box = page.get_by_label("SMS message (English)")
+    initial = box.bounding_box()["height"]
+    box.fill("line\n" * 12)
+    assert box.bounding_box()["height"] > initial
