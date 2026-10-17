@@ -113,3 +113,16 @@ def test_build_predictor_selects_backend(monkeypatch) -> None:
     monkeypatch.setattr(main, "TransformersPredictor", lambda s: "torch")
     assert main.build_predictor(Settings(_env_file=None)) == "onnx"
     assert main.build_predictor(Settings(_env_file=None, backend="transformers")) == "torch"
+
+
+def test_frontend_is_not_served_by_default(client: TestClient) -> None:
+    assert client.get("/").status_code == 404
+
+
+def test_frontend_can_be_served_for_local_development(tmp_path) -> None:
+    (tmp_path / "index.html").write_text("<h1>hello</h1>")
+    settings = Settings(_env_file=None, frontend_dir=str(tmp_path))
+    with TestClient(create_app(settings, predictor_factory=FakePredictor)) as client:
+        assert client.get("/").text == "<h1>hello</h1>"
+        assert client.get("/health").json() == {"status": "ok"}
+        assert client.post("/v1/predict", json={"message": "you win"}).json()["is_fraud"]

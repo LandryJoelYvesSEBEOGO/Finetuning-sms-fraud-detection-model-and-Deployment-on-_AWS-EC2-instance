@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # Example: SMS_FRAUD_CORS_ORIGINS='["https://my-app.vercel.app"]'
     cors_origins: list[str] = []
     docs_enabled: bool = True
+    # Local development only: also serve the static frontend from this
+    # directory (e.g. "public"). On Vercel, public/ is served by the CDN.
+    frontend_dir: str | None = None
     log_level: str = "INFO"
 
     def resolved_onnx_dir(self) -> Path:
