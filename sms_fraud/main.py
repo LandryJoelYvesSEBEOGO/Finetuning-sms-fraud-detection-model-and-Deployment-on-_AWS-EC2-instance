@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from sms_fraud import __version__
@@ -146,6 +147,9 @@ def create_app(
         )
 
     app.include_router(router)
+    if settings.frontend_dir:
+        # Mounted last so that API routes take precedence.
+        app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
     return app
 
 

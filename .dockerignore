@@ -10,6 +10,6 @@ __pycache__/
 .env.*
 docs/
 tests/
-interface-web/
+public/
 *.png
 *.jpg

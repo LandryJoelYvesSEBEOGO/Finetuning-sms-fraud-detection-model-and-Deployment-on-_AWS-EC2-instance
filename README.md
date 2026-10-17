@@ -50,22 +50,17 @@ The system analyzes SMS messages to detect fraud attempts using a fine-tuned Mac
 
 ## 🏗 Architecture
 
-The project consists of three main services:
+```
+browser ──► public/ (static page: HTML, CSS, JS)
+   │
+   └──► /v1/predict, /health, /ready ──► FastAPI (sms_fraud) ──► ONNX Runtime
+```
 
-1. **API (FastAPI)**:
-   - Port: 8080
-   - Handles ML model and predictions
-   - Based on DistilBERT with PEFT fine-tuning
-
-2. **Web Interface**:
-   - Port: 8000
-   - Responsive user interface
-   - Communication with API via fetch
-
-3. **Nginx**:
-   - Port: 80
-   - Reverse proxy
-   - Routing management between API and web interface
+- **Frontend** (`public/`): static files, no build step and no external CDN. Served by
+  Vercel's CDN in production, by nginx with Docker Compose, or by the API itself in local
+  development (`SMS_FRAUD_FRONTEND_DIR=public`).
+- **API** (`sms_fraud/`): FastAPI app serving the ONNX export of the model.
+- Frontend and API share the same origin, so no CORS configuration is needed.
 
 ## 📋 Prerequisites
 
@@ -140,10 +135,11 @@ pytest && ruff check . && ruff format --check .
 
 ## 💻 Usage
 
-1. Access the web interface: `http://your-ip`
-2. Enter an SMS message in the text area
-3. Click "Analyze"
-4. The result will appear in the "Result" section
+1. Open the web interface.
+2. Paste an English SMS message (or pick an example) and click **Analyze** (or press
+   <kbd>Ctrl</kbd> + <kbd>Enter</kbd>).
+3. Read the verdict, the fraud score against the alert threshold, the analysis time and the
+   model version.
 
 ## 📁 Project Structure
 
@@ -157,9 +153,9 @@ pytest && ruff check . && ruff format --check .
 │   ├── export.py          # fp32 ONNX export + parity check
 │   ├── schemas.py         # request/response models
 │   └── config.py          # environment-based settings
-├── tests/                 # pytest suite (no network needed)
+├── tests/                 # pytest suite (no network needed), tests/e2e: Playwright
 ├── scripts/smoke_test.py  # end-to-end check of a running instance
-├── interface-web/         # static web page
+├── public/                # static frontend (index.html, styles.css, i18n.js, app.js)
 ├── Dockerfile, docker-compose.yml, nginx.conf
 └── docs/AUDIT.md          # technical audit and roadmap
 ```
@@ -197,12 +193,20 @@ Invalid input (empty, too long, too many messages) returns `422`; `503` means th
 
 ## 🌐 Web Interface
 
-The web interface offers:
-- Responsive design
-- Input validation
-- Visual feedback of results
-- Error handling
-- Multilingual support (EN/FR)
+- Verdict with advice, fraud score meter with the alert threshold, analysis time, model version
+- Example messages, <kbd>Ctrl</kbd> + <kbd>Enter</kbd> shortcut, character counter (2000 max)
+- Explicit messages for empty input, invalid input, model warm-up, timeouts and network errors
+- Model status indicator (polls `/ready` while the model is warming up)
+- English and French interface (follows the browser, remembers the choice)
+- Responsive, light and dark themes, keyboard accessible, WCAG AA contrast
+- A notice states the limits of the proof of concept
+
+Run it locally:
+
+```bash
+SMS_FRAUD_FRONTEND_DIR=public python -m sms_fraud   # http://127.0.0.1:8080
+pytest -m e2e                                         # browser tests (Playwright + Chromium)
+```
 
 ## 🚢 Deployment
 
