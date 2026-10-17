@@ -132,22 +132,22 @@ interface-web/          index.html, styles.css, server.py (http.server), Dockerf
 
 ### Conséquence d'architecture : Vercel impose une inférence légère
 Les fonctions Python Vercel ont une taille de bundle limitée, et PyTorch (plusieurs centaines de Mo) n'y tient pas.
-L'inférence en production passera donc par **ONNX Runtime** (modèle LoRA fusionné, exporté en ONNX puis quantifié en int8, ≈ 70 Mo).
+L'inférence en production passera donc par **ONNX Runtime** (modèle LoRA fusionné, exporté en ONNX fp32 sans modification des poids, ≈ 265 Mo, téléchargé au démarrage dans `/tmp`).
 PyTorch reste utilisé pour l'entraînement et l'export.
 
 ```
 Vercel
 ├── frontend statique (HTML/CSS/JS)    → /
 └── fonction Python FastAPI            → /api/v1/predict
-        └── ONNX Runtime + tokenizers  ← modèle int8 (Hugging Face Hub, révision épinglée)
+        └── ONNX Runtime + tokenizers  ← modèle fp32 (release GitHub, checksum vérifié)
 ```
 
 ### Phases (une pull request par phase, petits commits)
 
 | Phase | Contenu | Corrige |
 |---|---|---|
-| **1. Fiabilisation backend** | Package `sms_fraud/`, contrat d'API `/v1` (label + score), validation, troncature, inférence non bloquante, `/health` et `/ready`, config par variables d'environnement, CORS restreint, stack Python 3.12 alignée sur l'entraînement, tests pytest, lint ruff, CI GitHub Actions | B1–B11, M4, M5, F1, I3, I6–I8 |
-| **2. ML reproductible** | `training/` : préparation du dataset anglais de fraude, entraînement LoRA, évaluation (precision/recall/F1, matrice de confusion, choix du seuil), baseline TF-IDF, model card | M1, M6, M7 |
-| **3. Inférence ONNX** | Fusion LoRA, export ONNX, quantification int8, backend `onnx` de l'API, vérification de parité avec PyTorch | Compatibilité Vercel |
+| ✅ **1. Fiabilisation backend** | Package `sms_fraud/`, contrat d'API `/v1` (label + score), validation, troncature, inférence non bloquante, `/health` et `/ready`, config par variables d'environnement, CORS restreint, stack Python 3.12 alignée sur l'entraînement, tests pytest, lint ruff, CI GitHub Actions | B1–B11, M4, M5, F1, I3, I6–I8 |
+| ~~2. ML reproductible~~ | **Hors périmètre** : le modèle publié est conservé tel quel (décision du 2026-10-17), le dataset ayant déjà été indexé par ailleurs | — |
+| **3. Inférence ONNX** | Fusion LoRA, export ONNX **fp32** (poids inchangés, pas de quantification), backend `onnx` de l'API, vérification de parité avec PyTorch, publication en release GitHub | Compatibilité Vercel, M6 |
 | **4. Frontend** | Nouvelle UI : verdict, jauge de confiance, exemples, états de chargement et d'erreur, accessibilité | F2–F6 |
 | **5. Déploiement Vercel** | `vercel.json`, fonction Python, déploiements de preview par PR, suppression de Docker/nginx/EC2, README fidèle | I1, I2, I4, I5, I9, doc |
