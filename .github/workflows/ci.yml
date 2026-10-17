@@ -37,7 +37,26 @@ jobs:
         run: |
           pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-dev.txt
-      - run: pytest
+      - run: pytest -m "not e2e"
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies (CPU-only torch) and Chromium
+        run: |
+          pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+          python -m playwright install --with-deps chromium
+      - name: Browser tests of the frontend
+        env:
+          E2E_REQUIRED: "1"
+        run: pytest -m e2e
 
   runtime-footprint:
     # Guards the Vercel function size limit (500 MB, model downloaded at runtime).
@@ -66,3 +85,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build API image
         run: docker build -t sms-fraud-api .
+      - name: Validate nginx configuration
+        run: |
+          docker run --rm --add-host api:127.0.0.1 \
+            -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/public:/usr/share/nginx/html:ro" \
+            nginx:1.27-alpine nginx -t
