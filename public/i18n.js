@@ -45,6 +45,17 @@ window.I18N = (() => {
             "error.network": "Could not reach the analysis service.",
             "notice.title": "About this demo",
             "notice.body": "This is a proof of concept. The model (DistilBERT fine-tuned with LoRA on English SMS) can be wrong in both directions: never rely on it alone, and never share codes, passwords or bank details by SMS.",
+            "hero.badge": "Proof of concept · DistilBERT + LoRA",
+            "hero.title1": "Is this SMS",
+            "hero.title2": "a scam?",
+            "steps.title": "How it works",
+            "steps.1.title": "Paste",
+            "steps.1.body": "Paste an English SMS. Messages are analyzed on the fly, never stored or logged.",
+            "steps.2.title": "Analyze",
+            "steps.2.body": "DistilBERT fine-tuned with LoRA reads the message, served with ONNX Runtime in milliseconds.",
+            "steps.3.title": "Decide",
+            "steps.3.body": "You get a fraud score from 0 to 100%, compared with an alert threshold.",
+            "footer.note": "Proof of concept, for demonstration only.",
             "footer.source": "Source code",
             "footer.api": "API documentation",
         },
@@ -90,6 +101,17 @@ window.I18N = (() => {
             "error.network": "Impossible de joindre le service d'analyse.",
             "notice.title": "À propos de cette démo",
             "notice.body": "Ceci est une preuve de concept. Le modèle (DistilBERT affiné avec LoRA sur des SMS en anglais) peut se tromper dans les deux sens : ne vous y fiez jamais seul, et ne communiquez jamais de code, de mot de passe ou de coordonnées bancaires par SMS.",
+            "hero.badge": "Preuve de concept · DistilBERT + LoRA",
+            "hero.title1": "Ce SMS est-il",
+            "hero.title2": "une arnaque ?",
+            "steps.title": "Comment ça marche",
+            "steps.1.title": "Collez",
+            "steps.1.body": "Collez un SMS en anglais. Il est analysé à la volée, jamais stocké ni journalisé.",
+            "steps.2.title": "Analyse",
+            "steps.2.body": "DistilBERT affiné avec LoRA lit le message, servi par ONNX Runtime en quelques millisecondes.",
+            "steps.3.title": "Décision",
+            "steps.3.body": "Vous obtenez un score de fraude de 0 à 100 %, comparé à un seuil d'alerte.",
+            "footer.note": "Preuve de concept, à des fins de démonstration uniquement.",
             "footer.source": "Code source",
             "footer.api": "Documentation de l'API",
         },
@@ -123,6 +145,7 @@ window.I18N = (() => {
             el.placeholder = t(el.dataset.i18nPlaceholder);
         });
         document.documentElement.lang = lang;
+        document.title = t("title");
     }
 
     return {
