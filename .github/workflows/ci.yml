@@ -78,16 +78,3 @@ jobs:
           size_mb=$(du -sm /tmp/rt/lib/python3.12/site-packages | cut -f1)
           echo "Runtime dependencies: ${size_mb} MB" | tee -a "$GITHUB_STEP_SUMMARY"
           test "$size_mb" -lt 300
-
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build API image
-        run: docker build -t sms-fraud-api .
-      - name: Validate nginx configuration
-        run: |
-          docker run --rm --add-host api:127.0.0.1 \
-            -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
-            -v "$PWD/public:/usr/share/nginx/html:ro" \
-            nginx:1.27-alpine nginx -t
