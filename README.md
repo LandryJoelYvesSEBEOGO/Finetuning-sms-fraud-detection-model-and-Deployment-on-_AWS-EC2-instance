@@ -94,6 +94,10 @@ The API is configured with environment variables prefixed with `SMS_FRAUD_`:
 
 | Variable | Default | Description |
 |---|---|---|
+| `SMS_FRAUD_BACKEND` | `onnx` | `onnx` (production) or `transformers` (PyTorch reference) |
+| `SMS_FRAUD_ONNX_DIR` | `artifacts/onnx` (`/tmp/…` on Vercel) | Directory of the ONNX artifacts |
+| `SMS_FRAUD_ONNX_URL` | `model-onnx-2cf2ba0` release | Where to download the artifacts when missing |
+| `SMS_FRAUD_ONNX_SHA256` | — | Optional pinned checksum of `model.onnx` |
 | `SMS_FRAUD_BASE_MODEL` | `distilbert-base-uncased` | Base model |
 | `SMS_FRAUD_ADAPTER_REPO` | `MrNWARMeilleur/sms_fraud_detection` | LoRA adapter (Hub repo or local path) |
 | `SMS_FRAUD_ADAPTER_REVISION` | pinned commit | Adapter revision |
@@ -103,6 +107,24 @@ The API is configured with environment variables prefixed with `SMS_FRAUD_`:
 | `SMS_FRAUD_DOCS_ENABLED` | `true` | Expose `/docs` and `/openapi.json` |
 | `SMS_FRAUD_LOG_LEVEL` | `INFO` | Log level |
 
+### Inference: ONNX Runtime
+
+The API serves an **fp32 ONNX export** of the LoRA-merged model with ONNX Runtime and the
+`tokenizers` library, so serving needs neither PyTorch nor transformers (~190 MB of
+dependencies, which fits a Vercel Python function). The weights are not modified: no
+quantization, and the export is rejected if its probabilities differ from PyTorch by more
+than `1e-4`.
+
+The artifacts (`model.onnx`, `tokenizer.json`, `metadata.json`) are published as a GitHub
+release by the **Export ONNX model** workflow (*Actions → Export ONNX model → Run workflow*)
+and downloaded by the API on first start, with checksum verification.
+
+| File | Role |
+|---|---|
+| `requirements.txt` | Runtime only (ONNX Runtime, tokenizers, FastAPI) |
+| `requirements-ml.txt` | + PyTorch, transformers, PEFT: export and reference backend |
+| `requirements-dev.txt` | + pytest, ruff |
+
 ### Local development
 
 ```bash
@@ -110,6 +132,7 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements-dev.txt
 
+python -m sms_fraud.export              # export + parity check -> artifacts/onnx
 python -m sms_fraud                     # API on http://127.0.0.1:8080
 python scripts/smoke_test.py            # smoke test a running instance
 pytest && ruff check . && ruff format --check .
@@ -128,7 +151,10 @@ pytest && ruff check . && ruff format --check .
 .
 ├── sms_fraud/             # API package
 │   ├── main.py            # FastAPI app factory and routes
-│   ├── predictor.py       # model loading and inference
+│   ├── predictor.py       # PyTorch reference backend
+│   ├── onnx_predictor.py  # ONNX Runtime backend (production)
+│   ├── artifacts.py       # download and checksum of ONNX artifacts
+│   ├── export.py          # fp32 ONNX export + parity check
 │   ├── schemas.py         # request/response models
 │   └── config.py          # environment-based settings
 ├── tests/                 # pytest suite (no network needed)

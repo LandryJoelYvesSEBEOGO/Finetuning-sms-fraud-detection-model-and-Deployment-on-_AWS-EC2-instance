@@ -104,3 +104,12 @@ def test_docs_can_be_disabled() -> None:
     with TestClient(create_app(settings, predictor_factory=FakePredictor)) as client:
         assert client.get("/docs").status_code == 404
         assert client.get("/openapi.json").status_code == 404
+
+
+def test_build_predictor_selects_backend(monkeypatch) -> None:
+    from sms_fraud import main
+
+    monkeypatch.setattr(main, "OnnxPredictor", lambda s: "onnx")
+    monkeypatch.setattr(main, "TransformersPredictor", lambda s: "torch")
+    assert main.build_predictor(Settings(_env_file=None)) == "onnx"
+    assert main.build_predictor(Settings(_env_file=None, backend="transformers")) == "torch"

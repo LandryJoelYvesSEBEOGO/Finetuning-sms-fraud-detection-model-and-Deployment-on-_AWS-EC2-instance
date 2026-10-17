@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from sms_fraud import __version__
 from sms_fraud.config import Settings, get_settings
+from sms_fraud.onnx_predictor import OnnxPredictor
 from sms_fraud.predictor import Predictor, TransformersPredictor
 from sms_fraud.schemas import (
     BatchPredictRequest,
@@ -30,6 +31,13 @@ logger = logging.getLogger("sms_fraud")
 PredictorFactory = Callable[[Settings], Predictor]
 
 router = APIRouter()
+
+
+def build_predictor(settings: Settings) -> Predictor:
+    """Instantiate the configured inference backend."""
+    if settings.backend == "transformers":
+        return TransformersPredictor(settings)
+    return OnnxPredictor(settings)
 
 
 def _get_predictor(request: Request) -> Predictor:
@@ -103,7 +111,7 @@ def predict_batch(body: BatchPredictRequest, request: Request) -> BatchPredictRe
 
 def create_app(
     settings: Settings | None = None,
-    predictor_factory: PredictorFactory = TransformersPredictor,
+    predictor_factory: PredictorFactory = build_predictor,
 ) -> FastAPI:
     settings = settings or get_settings()
     logging.basicConfig(

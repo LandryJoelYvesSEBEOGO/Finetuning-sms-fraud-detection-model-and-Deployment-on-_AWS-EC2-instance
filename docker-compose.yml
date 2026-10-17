@@ -4,8 +4,8 @@ services:
     environment:
       - SMS_FRAUD_LOG_LEVEL=INFO
     volumes:
-      # Persist the Hugging Face cache so the model is downloaded only once.
-      - hf-cache:/home/appuser/.cache/huggingface
+      # Persist the ONNX artifacts so they are downloaded only once.
+      - onnx-model:/home/appuser/models
     restart: unless-stopped
     networks:
       - sms-fraud-network
@@ -42,7 +42,7 @@ services:
       - sms-fraud-network
 
 volumes:
-  hf-cache:
+  onnx-model:
 
 networks:
   sms-fraud-network:
