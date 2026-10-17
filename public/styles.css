@@ -439,6 +439,10 @@ textarea:focus-visible {
     color: var(--text-muted);
 }
 
+.details .details-wide {
+    grid-column: 1 / -1;
+}
+
 .details dd {
     margin: 0;
     font-weight: 600;
