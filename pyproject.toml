@@ -3,6 +3,20 @@ name = "sms-fraud-detection"
 version = "0.2.0"
 description = "SMS fraud detection API based on a LoRA fine-tuned DistilBERT"
 requires-python = ">=3.12"
+# Runtime dependencies, deployed to Vercel. Must match requirements.txt
+# (enforced by tests/test_packaging.py).
+dependencies = [
+    "onnxruntime==1.20.1",
+    "tokenizers==0.21.0",
+    "numpy==2.2.1",
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+]
+
+[tool.vercel]
+entrypoint = "sms_fraud.main:app"
 
 [tool.ruff]
 line-length = 100
