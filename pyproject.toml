@@ -14,4 +14,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-markers = ["model: tests that build and run a tiny local transformer model (slower)"]
+markers = [
+    "model: tests that build and run a tiny local transformer model (slower)",
+    "e2e: browser tests of the frontend (need Playwright and Chromium)",
+]
