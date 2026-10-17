@@ -39,6 +39,27 @@ jobs:
           pip install -r requirements-dev.txt
       - run: pytest
 
+  runtime-footprint:
+    # Guards the Vercel function size limit (500 MB, model downloaded at runtime).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m venv /tmp/rt && /tmp/rt/bin/pip install -q -r requirements.txt
+      - name: Import the app without ML tooling
+        run: |
+          /tmp/rt/bin/python -c "import sms_fraud.main"
+          if /tmp/rt/bin/python -c "import torch" 2>/dev/null; then
+            echo "::error::torch must not be a runtime dependency"; exit 1
+          fi
+      - name: Check installed size
+        run: |
+          size_mb=$(du -sm /tmp/rt/lib/python3.12/site-packages | cut -f1)
+          echo "Runtime dependencies: ${size_mb} MB" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$size_mb" -lt 300
+
   docker:
     runs-on: ubuntu-latest
     steps:
