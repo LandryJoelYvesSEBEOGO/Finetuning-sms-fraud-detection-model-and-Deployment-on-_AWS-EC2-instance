@@ -1,4 +1,5 @@
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,3 +31,12 @@ def client(settings: Settings) -> Iterator[TestClient]:
     app = create_app(settings, predictor_factory=FakePredictor)
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture(scope="session")
+def tiny_model_dirs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    pytest.importorskip("torch")
+    pytest.importorskip("peft")
+    from tests.tiny_model import build_tiny_model
+
+    return build_tiny_model(tmp_path_factory.mktemp("tiny-model"))
