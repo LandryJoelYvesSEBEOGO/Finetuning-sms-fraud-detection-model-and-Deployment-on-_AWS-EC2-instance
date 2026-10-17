@@ -1,10 +1,13 @@
 """Browser tests: the real page in public/, served by the API with a fake model."""
 
+import json
 import os
+import re
 import socket
 import threading
 import time
 from collections.abc import Iterator, Sequence
+from pathlib import Path
 
 import pytest
 import uvicorn
@@ -27,6 +30,28 @@ class KeywordPredictor:
         return [0.97 if any(w in m.lower() for w in FRAUD_WORDS) else 0.04 for m in messages]
 
 
+def _vercel_headers(path: str) -> dict[str, str]:
+    """Headers vercel.json applies to path (its sources are regexes in path-to-regexp form)."""
+    config = json.loads((Path(__file__).resolve().parents[2] / "vercel.json").read_text())
+    headers: dict[str, str] = {}
+    for rule in config.get("headers", []):
+        if re.fullmatch(rule["source"], path):
+            headers.update({h["key"]: h["value"] for h in rule["headers"]})
+    return headers
+
+
+def _with_production_headers(app):
+    """Serve every response with the headers Vercel adds, CSP included."""
+
+    @app.middleware("http")
+    async def add_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.update(_vercel_headers(request.url.path))
+        return response
+
+    return app
+
+
 def _free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -36,7 +61,7 @@ def _free_port() -> int:
 @pytest.fixture(scope="session")
 def base_url() -> Iterator[str]:
     settings = Settings(_env_file=None, frontend_dir="public")
-    app = create_app(settings, predictor_factory=KeywordPredictor)
+    app = _with_production_headers(create_app(settings, predictor_factory=KeywordPredictor))
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)

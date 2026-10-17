@@ -95,3 +95,15 @@ def test_mobile_layout_has_no_horizontal_scroll(browser, base_url: str) -> None:
 def test_api_routes_still_win_over_static_files(page: Page, base_url: str) -> None:
     response = page.request.get(f"{base_url}/health")
     assert response.json() == {"status": "ok"}
+
+
+def test_page_is_served_with_the_production_csp(page: Page, base_url: str) -> None:
+    csp = page.request.get(f"{base_url}/").headers["content-security-policy"]
+    assert "script-src 'self'" in csp
+    # The page fixture fails the test on any console error, CSP violations included.
+    page.get_by_role("button", name="Prize claim").click()
+    expect(page.locator("#result")).to_have_attribute("data-state", "fraud")
+
+
+def test_docs_are_not_blocked_by_the_csp(page: Page, base_url: str) -> None:
+    assert "content-security-policy" not in page.request.get(f"{base_url}/docs").headers
