@@ -60,7 +60,7 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def base_url() -> Iterator[str]:
-    settings = Settings(_env_file=None, frontend_dir="public")
+    settings = Settings(_env_file=None, frontend_dir="public", rate_limit_per_minute=0)
     app = _with_production_headers(create_app(settings, predictor_factory=KeywordPredictor))
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
