@@ -1,0 +1,103 @@
+name: Export ONNX model
+
+# Converts the real Hub model to ONNX and checks it against PyTorch.
+# - on pull requests touching the export/inference code: export + parity + smoke test
+# - on manual dispatch: same, then publish the files as a GitHub release
+#   (tag model-onnx-<adapter revision>), which the API downloads at startup.
+
+on:
+  pull_request:
+    paths:
+      - "sms_fraud/**"
+      - "requirements*.txt"
+      - "scripts/smoke_test.py"
+      - ".github/workflows/export-onnx.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the artifacts as a GitHub release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-onnx-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Install dependencies (CPU-only torch)
+        run: |
+          pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-ml.txt
+
+      - name: Export and check parity with PyTorch
+        run: python -m sms_fraud.export --output artifacts/onnx
+
+      - name: Smoke test the API on the exported model
+        env:
+          SMS_FRAUD_ONNX_DIR: artifacts/onnx
+          SMS_FRAUD_ONNX_URL: ""
+        run: |
+          python -m sms_fraud > api.log 2>&1 &
+          for i in $(seq 60); do curl -sf http://127.0.0.1:8080/ready && break; sleep 2; done
+          python scripts/smoke_test.py http://127.0.0.1:8080 | tee smoke.txt
+          cat api.log
+
+      - id: meta
+        name: Summarise
+        run: |
+          rev=$(python -c "import json; print(json.load(open('artifacts/onnx/metadata.json'))['source']['adapter_revision'][:7])")
+          echo "tag=model-onnx-$rev" >> "$GITHUB_OUTPUT"
+          {
+            echo "### ONNX export"
+            echo '```json'; cat artifacts/onnx/metadata.json; echo '```'
+            echo "### Smoke test"
+            echo '```'; cat smoke.txt; echo '```'
+            ls -l artifacts/onnx | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onnx-model
+          path: artifacts/onnx/
+          retention-days: 7
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: export
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: onnx-model
+          path: onnx
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.export.outputs.tag }}
+        run: |
+          # Releases are never overwritten: deployed instances may pin their checksum.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists, nothing to publish"
+            exit 0
+          fi
+          gh release create "$TAG" onnx/model.onnx onnx/tokenizer.json onnx/metadata.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ONNX model ($TAG)" \
+            --notes "fp32 ONNX export of the LoRA-merged model (weights unchanged). See metadata.json for source revisions, checksums and the PyTorch parity gap."
