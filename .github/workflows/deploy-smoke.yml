@@ -1,0 +1,40 @@
+name: Smoke test deployment
+
+# Vercel's GitHub integration reports each deployment back to GitHub.
+# Once a production deployment succeeds, check the live site end to end.
+# (Preview deployments sit behind Vercel Authentication by default.)
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wait for the model (cold start downloads it)
+        env:
+          URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          for i in $(seq 30); do
+            curl -sf "$URL/ready" && exit 0
+            sleep 5
+          done
+          echo "::error::$URL/ready never became ready"; exit 1
+      - name: Check the frontend is served
+        env:
+          URL: ${{ github.event.deployment_status.environment_url }}
+        run: curl -sf "$URL/" | grep -q "<title>SMS Fraud Detector</title>"
+      - name: Smoke test the API
+        env:
+          URL: ${{ github.event.deployment_status.environment_url }}
+        run: python scripts/smoke_test.py "$URL"

@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     frontend_dir: str | None = None
     log_level: str = "INFO"
 
+    # Prediction requests allowed per client and per minute (0 disables).
+    rate_limit_per_minute: int = Field(60, ge=0)
+    # Trust X-Real-IP / X-Forwarded-For to identify clients. Defaults to true
+    # on Vercel, whose edge sets them; never enable without a trusted proxy.
+    trust_proxy_headers: bool | None = None
+
+    def resolved_trust_proxy_headers(self) -> bool:
+        if self.trust_proxy_headers is not None:
+            return self.trust_proxy_headers
+        return bool(os.environ.get("VERCEL"))
+
     def resolved_onnx_dir(self) -> Path:
         if self.onnx_dir:
             return Path(self.onnx_dir)

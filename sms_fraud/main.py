@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -16,6 +17,7 @@ from sms_fraud import __version__
 from sms_fraud.config import Settings, get_settings
 from sms_fraud.onnx_predictor import OnnxPredictor
 from sms_fraud.predictor import Predictor, TransformersPredictor
+from sms_fraud.ratelimit import RateLimiter, client_ip
 from sms_fraud.schemas import (
     BatchPredictRequest,
     BatchPredictResponse,
@@ -46,6 +48,20 @@ def _get_predictor(request: Request) -> Predictor:
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model is not loaded yet")
     return predictor
+
+
+def _enforce_rate_limit(request: Request) -> None:
+    limiter: RateLimiter | None = request.app.state.rate_limiter
+    if limiter is None:
+        return
+    settings: Settings = request.app.state.settings
+    retry_after = limiter.hit(client_ip(request, settings.resolved_trust_proxy_headers()))
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests",
+            headers={"Retry-After": str(max(1, math.ceil(retry_after)))},
+        )
 
 
 def _run(request: Request, messages: list[str]) -> tuple[list[Prediction], float, float, str]:
@@ -86,7 +102,12 @@ def ready(request: Request) -> ReadyResponse:
 
 # Endpoints are plain `def` on purpose: FastAPI runs them in a worker thread,
 # so CPU-bound inference does not block the event loop.
-@router.post("/v1/predict", response_model=PredictResponse, tags=["prediction"])
+@router.post(
+    "/v1/predict",
+    response_model=PredictResponse,
+    tags=["prediction"],
+    dependencies=[Depends(_enforce_rate_limit)],
+)
 def predict(body: PredictRequest, request: Request) -> PredictResponse:
     """Classify a single SMS message."""
     predictions, threshold, latency_ms, version = _run(request, [body.message])
@@ -98,7 +119,12 @@ def predict(body: PredictRequest, request: Request) -> PredictResponse:
     )
 
 
-@router.post("/v1/predict/batch", response_model=BatchPredictResponse, tags=["prediction"])
+@router.post(
+    "/v1/predict/batch",
+    response_model=BatchPredictResponse,
+    tags=["prediction"],
+    dependencies=[Depends(_enforce_rate_limit)],
+)
 def predict_batch(body: BatchPredictRequest, request: Request) -> BatchPredictResponse:
     """Classify up to 32 SMS messages in one call."""
     predictions, threshold, latency_ms, version = _run(request, body.messages)
@@ -137,6 +163,9 @@ def create_app(
     )
     app.state.settings = settings
     app.state.predictor = None
+    app.state.rate_limiter = (
+        RateLimiter(settings.rate_limit_per_minute) if settings.rate_limit_per_minute else None
+    )
 
     if settings.cors_origins:
         app.add_middleware(

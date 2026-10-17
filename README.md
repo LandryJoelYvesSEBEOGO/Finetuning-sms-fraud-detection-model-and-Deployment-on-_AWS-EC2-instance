@@ -1,173 +1,78 @@
-# SMS Fraud Detection - Machine Learning Project
+# SMS Fraud Detection
 
-<img src="sms_fraud_detection.png" alt="Texte alternatif" width="1000">
+Proof of concept that flags fraudulent SMS messages with a DistilBERT model fine-tuned with
+LoRA, served through a FastAPI API and a static web page, deployed on **Vercel**.
 
-This project implements an SMS fraud detection system using a Machine Learning model based on DistilBERT. The system is deployed via Docker and can be easily put into production on AWS.
- <img src="project_Pipepline.jpg" alt="Texte alternatif" width="1000">
- 
-## 🌟 Context and Motivation
+![Screenshot of the web interface](docs/screenshot.png)
 
-In an increasingly connected world, SMS fraud has become a major problem:
+> **Status: proof of concept.** The model can be wrong in both directions. See
+> [Model behaviour](#-model-behaviour) before relying on a verdict.
 
-- **Increase in Fraud**: In 2023, more than 60% of financial fraud starts with a fraudulent SMS
-- **Economic Cost**: Financial losses due to SMS fraud amount to several billion euros per year
-- **Social Impact**: Elderly and vulnerable people are particularly affected by these scams
+## 📋 Contents
 
-Our system addresses these challenges by:
-- Analyzing suspicious SMS messages in real-time
-- Using artificial intelligence to detect fraudulent patterns
-- Providing a simple interface for non-technical users
-- Offering a robust API for integration with other systems
-
-### Technological Innovation
-
-The project uses cutting-edge technologies:
-- **DistilBERT**: A powerful and lightweight language model
-- **PEFT (Parameter-Efficient Fine-Tuning)**: Model optimization for specific fraud cases
-- **Cloud Native Architecture**: Flexible and scalable deployment
-
-## 📋 Table of Contents
-
-- [Project Overview](#project-overview)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Project Structure](#project-structure)
-- [API Reference](#api-reference)
-- [Web Interface](#web-interface)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
-
-## 🎯 Project Overview
-
-The system analyzes SMS messages to detect fraud attempts using a fine-tuned Machine Learning model. It includes:
-- A FastAPI REST API
-- A user-friendly web interface
-- Nginx reverse proxy
-- Containerized architecture with Docker
+- [Architecture](#-architecture)
+- [Model behaviour](#-model-behaviour)
+- [API](#-api)
+- [Deploy on Vercel](#-deploy-on-vercel)
+- [Configuration](#️-configuration)
+- [Local development](#-local-development)
+- [Project structure](#-project-structure)
+- [Quality and CI](#-quality-and-ci)
 
 ## 🏗 Architecture
 
 ```
-browser ──► public/ (static page: HTML, CSS, JS)
-   │
-   └──► /v1/predict, /health, /ready ──► FastAPI (sms_fraud) ──► ONNX Runtime
+Vercel
+├── CDN ─────────────── public/  (index.html, styles.css, i18n.js, app.js)
+└── Python function ─── sms_fraud.main:app  (FastAPI)
+        /v1/predict, /v1/predict/batch, /health, /ready, /docs
+        └── ONNX Runtime + tokenizers
+                └── model.onnx (fp32), downloaded on cold start to /tmp
+                    from the GitHub release model-onnx-2cf2ba0, checksum verified
 ```
 
-- **Frontend** (`public/`): static files, no build step and no external CDN. Served by
-  Vercel's CDN in production, by nginx with Docker Compose, or by the API itself in local
-  development (`SMS_FRAUD_FRONTEND_DIR=public`).
-- **API** (`sms_fraud/`): FastAPI app serving the ONNX export of the model.
-- Frontend and API share the same origin, so no CORS configuration is needed.
+- **Model**: [`MrNWARMeilleur/sms_fraud_detection`](https://huggingface.co/MrNWARMeilleur/sms_fraud_detection),
+  a LoRA adapter (r=8, `q_lin`/`v_lin`) on `distilbert-base-uncased`, revision `2cf2ba0` pinned.
+- **Serving**: the adapter is merged into the base model and exported to ONNX in full precision.
+  The weights are unchanged (no quantization), and the export is rejected if its probabilities
+  differ from PyTorch by more than `1e-4` (measured gap on the real model: `3e-7`). Serving needs
+  neither PyTorch nor transformers: ~190 MB of dependencies, well under Vercel's 500 MB limit.
+- **Frontend and API share one origin**: no CORS configuration is needed.
 
-## 📋 Prerequisites
+## 🔎 Model behaviour
 
-- Docker and Docker Compose
-- Python 3.8 or higher (for local development)
-- Git
-- At least 4GB of RAM available
-- Internet connection (for downloading models)
+Every export scores a small hand-labelled set of English messages and records the result in the
+release's `metadata.json` (`sanity_report`). It is a smoke check of 12 messages, not an evaluation.
 
-## 🚀 Installation
-
-1. Clone the repository:
-```bash
-git clone [REPO_URL]
-cd sms-fraud-detection
-```
-
-2. Build and start containers:
-```bash
-docker-compose up --build
-```
-
-## ⚙️ Configuration
-
-The API is configured with environment variables prefixed with `SMS_FRAUD_`:
-
-| Variable | Default | Description |
+| Message (abridged) | Expected | Fraud score |
 |---|---|---|
-| `SMS_FRAUD_BACKEND` | `onnx` | `onnx` (production) or `transformers` (PyTorch reference) |
-| `SMS_FRAUD_ONNX_DIR` | `artifacts/onnx` (`/tmp/…` on Vercel) | Directory of the ONNX artifacts |
-| `SMS_FRAUD_ONNX_URL` | `model-onnx-2cf2ba0` release | Where to download the artifacts when missing |
-| `SMS_FRAUD_ONNX_SHA256` | — | Optional pinned checksum of `model.onnx` |
-| `SMS_FRAUD_BASE_MODEL` | `distilbert-base-uncased` | Base model |
-| `SMS_FRAUD_ADAPTER_REPO` | `MrNWARMeilleur/sms_fraud_detection` | LoRA adapter (Hub repo or local path) |
-| `SMS_FRAUD_ADAPTER_REVISION` | pinned commit | Adapter revision |
-| `SMS_FRAUD_THRESHOLD` | `0.5` | Minimum fraud probability to flag a message |
-| `SMS_FRAUD_MAX_TOKENS` | `512` | Truncation length |
-| `SMS_FRAUD_CORS_ORIGINS` | `[]` | Allowed origins, JSON list (empty = same-origin only) |
-| `SMS_FRAUD_DOCS_ENABLED` | `true` | Expose `/docs` and `/openapi.json` |
-| `SMS_FRAUD_LOG_LEVEL` | `INFO` | Log level |
+| You've won a $1000 gift card… reply with your PIN | fraud | 1.000 |
+| FREE entry in 2 a wkly comp to win FA Cup final tkts… | fraud | 1.000 |
+| Mom, I lost my phone… send me $200 for rent | fraud | 0.998 |
+| URGENT: your bank account has been suspended… | fraud | 0.000 |
+| Your package could not be delivered. Pay $1.99… | fraud | 0.000 |
+| IRS notice: you owe back taxes… | fraud | 0.002 |
+| Your Netflix payment failed. Update your card… | fraud | 0.000 |
+| Hey, are we still on for lunch tomorrow at 12? | legitimate | 0.053 |
+| Reminder: your dentist appointment is on Monday | legitimate | 0.000 |
+| Your Uber is arriving in 3 minutes. | legitimate | 0.000 |
+| Can you pick up milk on your way home? | legitimate | 0.996 |
+| Happy birthday! Have a great day, see you tonight | legitimate | 1.000 |
 
-### Inference: ONNX Runtime
+The model agrees with 6 of the 12 labels. It catches prize and "family emergency" scams, but
+misses phishing styles that are probably absent from its training data, and it flags some
+ordinary personal messages. Its scores are almost always close to 0 or 1, so the score should
+not be read as a calibrated probability. The training data, the code and metrics are not part
+of this repository, so this behaviour cannot be traced back to them here.
 
-The API serves an **fp32 ONNX export** of the LoRA-merged model with ONNX Runtime and the
-`tokenizers` library, so serving needs neither PyTorch nor transformers (~190 MB of
-dependencies, which fits a Vercel Python function). The weights are not modified: no
-quantization, and the export is rejected if its probabilities differ from PyTorch by more
-than `1e-4`.
+## 📡 API
 
-The artifacts (`model.onnx`, `tokenizer.json`, `metadata.json`) are published as a GitHub
-release by the **Export ONNX model** workflow (*Actions → Export ONNX model → Run workflow*)
-and downloaded by the API on first start, with checksum verification.
-
-| File | Role |
-|---|---|
-| `requirements.txt` | Runtime only (ONNX Runtime, tokenizers, FastAPI) |
-| `requirements-ml.txt` | + PyTorch, transformers, PEFT: export and reference backend |
-| `requirements-dev.txt` | + pytest, ruff |
-
-### Local development
-
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements-dev.txt
-
-python -m sms_fraud.export              # export + parity check -> artifacts/onnx
-python -m sms_fraud                     # API on http://127.0.0.1:8080
-python scripts/smoke_test.py            # smoke test a running instance
-pytest && ruff check . && ruff format --check .
-```
-
-## 💻 Usage
-
-1. Open the web interface.
-2. Paste an English SMS message (or pick an example) and click **Analyze** (or press
-   <kbd>Ctrl</kbd> + <kbd>Enter</kbd>).
-3. Read the verdict, the fraud score against the alert threshold, the analysis time and the
-   model version.
-
-## 📁 Project Structure
-
-```
-.
-├── sms_fraud/             # API package
-│   ├── main.py            # FastAPI app factory and routes
-│   ├── predictor.py       # PyTorch reference backend
-│   ├── onnx_predictor.py  # ONNX Runtime backend (production)
-│   ├── artifacts.py       # download and checksum of ONNX artifacts
-│   ├── export.py          # fp32 ONNX export + parity check
-│   ├── schemas.py         # request/response models
-│   └── config.py          # environment-based settings
-├── tests/                 # pytest suite (no network needed), tests/e2e: Playwright
-├── scripts/smoke_test.py  # end-to-end check of a running instance
-├── public/                # static frontend (index.html, styles.css, i18n.js, app.js)
-├── Dockerfile, docker-compose.yml, nginx.conf
-└── docs/AUDIT.md          # technical audit and roadmap
-```
-
-## 📡 API Reference
-
-Interactive documentation is available at `/docs` when enabled.
+Interactive documentation: `/docs`.
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Liveness probe |
-| `GET` | `/ready` | Readiness probe (model loaded) |
+| `GET` | `/ready` | Readiness probe (model loaded), returns the model version |
 | `POST` | `/v1/predict` | Classify one message (1–2000 characters) |
 | `POST` | `/v1/predict/batch` | Classify up to 32 messages |
 
@@ -184,151 +89,113 @@ Content-Type: application/json
   "is_fraud": true,
   "fraud_score": 0.982,
   "threshold": 0.5,
-  "model_version": "MrNWARMeilleur/sms_fraud_detection@2cf2ba0",
-  "latency_ms": 41.7
+  "model_version": "MrNWARMeilleur/sms_fraud_detection@2cf2ba0+onnx",
+  "latency_ms": 12.4
 }
 ```
 
-Invalid input (empty, too long, too many messages) returns `422`; `503` means the model is not loaded yet.
+| Status | Meaning |
+|---|---|
+| `422` | Invalid input (empty, longer than 2000 characters, more than 32 messages) |
+| `429` | Rate limit exceeded; see the `Retry-After` header |
+| `503` | Model not loaded yet (cold start) |
 
-## 🌐 Web Interface
+Messages are never logged; only counts and latency are.
 
-- Verdict with advice, fraud score meter with the alert threshold, analysis time, model version
-- Example messages, <kbd>Ctrl</kbd> + <kbd>Enter</kbd> shortcut, character counter (2000 max)
-- Explicit messages for empty input, invalid input, model warm-up, timeouts and network errors
-- Model status indicator (polls `/ready` while the model is warming up)
-- English and French interface (follows the browser, remembers the choice)
-- Responsive, light and dark themes, keyboard accessible, WCAG AA contrast
-- A notice states the limits of the proof of concept
+## 🚀 Deploy on Vercel
 
-Run it locally:
+1. **Publish the ONNX model** (once per model revision): *Actions → Export ONNX model → Run
+   workflow* on `main`. It exports the model, checks parity with PyTorch, smoke-tests the API and
+   publishes the `model-onnx-2cf2ba0` release the API downloads. Releases are never overwritten.
+2. **Import the repository** in Vercel (*Add New → Project*). The FastAPI preset is detected from
+   `pyproject.toml` (`[tool.vercel] entrypoint = "sms_fraud.main:app"`). No build command and no
+   environment variable are required.
+3. **Deploy.** `public/` is served by the CDN, the API by a Python function (`vercel.json`:
+   60 s max duration, tests/docs excluded from the bundle, security headers and CSP).
+4. Every pull request gets a preview deployment. After each production deployment, the
+   *Smoke test deployment* workflow checks the live site.
+
+Recommended hardening:
+- set `SMS_FRAUD_ONNX_SHA256` to the `model.onnx` checksum from the release's `metadata.json`;
+- add a rate limiting rule in Vercel's firewall (the built-in limiter works per instance).
+
+The first request after a period of inactivity starts a new instance, which downloads the model
+(~270 MB). The page shows "Model warming up" and retries automatically during that time.
+
+## ⚙️ Configuration
+
+Environment variables, all optional:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMS_FRAUD_BACKEND` | `onnx` | `onnx` (production) or `transformers` (PyTorch reference) |
+| `SMS_FRAUD_ONNX_DIR` | `artifacts/onnx` (`/tmp/…` on Vercel) | Directory of the ONNX artifacts |
+| `SMS_FRAUD_ONNX_URL` | `model-onnx-2cf2ba0` release | Where to download the artifacts when missing |
+| `SMS_FRAUD_ONNX_SHA256` | — | Expected checksum of `model.onnx` |
+| `SMS_FRAUD_THRESHOLD` | `0.5` | Minimum fraud score to flag a message |
+| `SMS_FRAUD_MAX_TOKENS` | `512` | Truncation length |
+| `SMS_FRAUD_RATE_LIMIT_PER_MINUTE` | `60` | Prediction requests per client per minute (`0` disables) |
+| `SMS_FRAUD_TRUST_PROXY_HEADERS` | `true` on Vercel | Identify clients by `X-Real-IP` / `X-Forwarded-For` |
+| `SMS_FRAUD_CORS_ORIGINS` | `[]` | Allowed origins, JSON list (empty = same origin only) |
+| `SMS_FRAUD_DOCS_ENABLED` | `true` | Expose `/docs` and `/openapi.json` |
+| `SMS_FRAUD_FRONTEND_DIR` | — | Serve the static frontend from the API (local development) |
+| `SMS_FRAUD_LOG_LEVEL` | `INFO` | Log level |
+| `SMS_FRAUD_BASE_MODEL`, `SMS_FRAUD_ADAPTER_REPO`, `SMS_FRAUD_ADAPTER_REVISION` | pinned | Model source (export and `transformers` backend) |
+
+## 💻 Local development
 
 ```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-dev.txt
+python -m playwright install chromium        # for the browser tests
+
+python -m sms_fraud.export                   # export + parity check -> artifacts/onnx
 SMS_FRAUD_FRONTEND_DIR=public python -m sms_fraud   # http://127.0.0.1:8080
-pytest -m e2e                                         # browser tests (Playwright + Chromium)
+python scripts/smoke_test.py                 # smoke test a running instance
 ```
 
-## 🚢 Deployment
+Without the export step, the API downloads the published release on first start.
 
-### AWS Deployed Architecture
+| File | Contents |
+|---|---|
+| `requirements.txt` (= `pyproject.toml` dependencies) | Runtime: ONNX Runtime, tokenizers, FastAPI |
+| `requirements-ml.txt` | + PyTorch, transformers, PEFT: export and reference backend |
+| `requirements-dev.txt` | + pytest, ruff, Playwright |
 
-Our solution is currently deployed on AWS with the following architecture:
+## 📁 Project structure
 
-#### Infrastructure
-- **EC2 Instance**: 
-  - Type: t2.medium (2 vCPU, 4GB RAM)
-  - OS: Ubuntu 22.04 LTS
-  - Region: eu-west-3 (Paris)
+```
+.
+├── sms_fraud/               # API package
+│   ├── main.py              # FastAPI app factory, routes, rate limiting hook
+│   ├── schemas.py           # request/response models
+│   ├── config.py            # environment-based settings
+│   ├── onnx_predictor.py    # ONNX Runtime backend (production)
+│   ├── predictor.py         # PyTorch reference backend
+│   ├── artifacts.py         # download and checksum of ONNX artifacts
+│   ├── export.py            # fp32 ONNX export, parity check, sanity report
+│   └── ratelimit.py         # per-client rate limiter
+├── public/                  # static frontend (served by Vercel's CDN)
+├── tests/                   # pytest suite; tests/e2e: Playwright browser tests
+├── scripts/smoke_test.py    # end-to-end check of a running instance
+├── vercel.json              # function settings and security headers
+├── .github/workflows/       # CI, ONNX export/release, deployment smoke test
+└── docs/AUDIT.md            # technical audit and roadmap
+```
 
-#### Security
-- **Security Groups**:
-  - Inbound: Ports 80 (HTTP), 443 (HTTPS), 22 (SSH)
-  - Outbound: All traffic allowed
+## ✅ Quality and CI
 
-#### Network
-- **Dedicated VPC**:
-  - Public and private subnets
-  - NAT Gateway for Internet access
-
-#### Monitoring
-- **CloudWatch**:
-  - Performance metrics
-  - Resource consumption alerts
-  - Container logs
-
-#### Current Deployment
-1. **Server Preparation**:
 ```bash
-# System update
-sudo apt-get update && sudo apt-get upgrade -y
-
-# Docker and Docker Compose installation
-sudo apt-get install docker.io docker-compose -y
+ruff check . && ruff format --check .
+pytest -m "not e2e"     # unit and API tests, no network needed
+pytest -m e2e           # browser tests under the production CSP
 ```
 
-2. **SSL/TLS Configuration**:
-```bash
-# Certbot installation
-sudo apt-get install certbot python3-certbot-nginx -y
-
-# Certificate generation
-sudo certbot --nginx -d your-domain.com
-```
-
-3. **Container Deployment**:
-```bash
-# Repository cloning
-git clone https://github.com/your-repo/sms-fraud-detection.git
-cd sms-fraud-detection
-
-# Environment variables configuration
-cp .env.example .env
-nano .env
-
-# Deployment
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Performance and Scalability
-
-The deployed system offers:
-- **Response Time**: < 500ms for SMS analysis
-- **Capacity**: Up to 100 simultaneous requests
-- **Availability**: 99.9% uptime
-
-### Maintenance
-
-Automated maintenance scripts are in place:
-```bash
-# Daily log backup
-0 0 * * * docker-compose logs > /backup/logs/$(date +\%Y\%m\%d).log
-
-# Weekly container updates
-0 0 * * 0 docker-compose pull && docker-compose up -d
-```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-1. **Failed to fetch**:
-   - Check if API is accessible
-   - Check Nginx logs
-   - Verify CORS configuration
-
-2. **Model Errors**:
-   - Check available disk space
-   - Check available RAM
-   - Consult API logs
-
-### Logs
-
-To view logs:
-```bash
-# API logs
-docker-compose logs api
-
-# Web logs
-docker-compose logs web
-
-# Nginx logs
-docker-compose logs nginx
-```
-
-## 🔒 Security
-
-- CORS configured for production
-- Input validation
-- No sensitive data storage
-- Containers with non-root users
+GitHub Actions runs lint, unit tests, browser tests, a runtime size guard (no torch, < 300 MB),
+the ONNX export of the real model with its parity check on pull requests touching inference
+code, and a smoke test of each production deployment.
 
 ## 📄 License
 
-This project is under MIT license. See the [LICENSE](LICENSE) file for more details.
-
-## 👥 Contact
-
-For any questions or suggestions:
-- **Email**: your.email@domain.com
-- **LinkedIn**: [Your Profile](https://linkedin.com/in/your-profile)
-- **GitHub**: [Your Account](https://github.com/your-account) 
+No license has been chosen yet.

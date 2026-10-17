@@ -31,8 +31,6 @@
         verdictText: $("verdictText"),
         verdictHelp: $("verdictHelp"),
         meter: $("meter"),
-        meterFill: $("meterFill"),
-        meterThreshold: $("meterThreshold"),
         scoreValue: $("scoreValue"),
         thresholdValue: $("thresholdValue"),
         latencyValue: $("latencyValue"),
@@ -44,6 +42,8 @@
 
     // Kept so the current view can be re-rendered when the language changes.
     const view = { result: null, errorKey: null, statusKind: "pending" };
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let tickerFrame = 0;
     let inFlight = false;
     let polling = false;
 
@@ -81,11 +81,34 @@
     const formatPercent = (value) =>
         new Intl.NumberFormat(window.I18N.lang, { style: "percent", maximumFractionDigits: 1 }).format(value);
 
+    // Counts the score up from 0, like a number ticker; instant with reduced motion.
+    function animateScore(target, animate) {
+        cancelAnimationFrame(tickerFrame);
+        if (!animate || reducedMotion.matches) {
+            els.scoreValue.textContent = formatPercent(target);
+            return;
+        }
+        const duration = 650;
+        const start = performance.now();
+        const step = (now) => {
+            const progress = Math.min((now - start) / duration, 1);
+            const eased = 1 - (1 - progress) ** 3;
+            els.scoreValue.textContent = formatPercent(target * eased);
+            if (progress < 1) tickerFrame = requestAnimationFrame(step);
+        };
+        tickerFrame = requestAnimationFrame(step);
+    }
+
+    function autoResize() {
+        els.message.style.height = "auto";
+        els.message.style.height = `${els.message.scrollHeight}px`;
+    }
+
     function setState(state) {
         els.result.dataset.state = state;
     }
 
-    function renderResult(result) {
+    function renderResult(result, { animate = true } = {}) {
         view.result = result;
         view.errorKey = null;
         setState(result.is_fraud ? "fraud" : "legit");
@@ -93,12 +116,12 @@
         els.verdictHelp.textContent = t(result.is_fraud ? "verdict.fraudHelp" : "verdict.legitHelp");
 
         const percent = Math.round(result.fraud_score * 1000) / 10;
-        els.meterFill.style.width = `${percent}%`;
-        els.meterThreshold.style.left = `${result.threshold * 100}%`;
+        els.meter.style.setProperty("--score", `${percent}%`);
+        els.meter.style.setProperty("--threshold", `${result.threshold * 100}%`);
         els.meter.setAttribute("aria-valuenow", String(percent));
         els.meter.setAttribute("aria-valuetext", formatPercent(result.fraud_score));
 
-        els.scoreValue.textContent = formatPercent(result.fraud_score);
+        animateScore(result.fraud_score, animate);
         els.thresholdValue.textContent = formatPercent(result.threshold);
         els.latencyValue.textContent = `${Math.round(result.latency_ms)} ms`;
         els.modelValue.textContent = result.model_version;
@@ -149,6 +172,7 @@
         if (inFlight) return;
 
         inFlight = true;
+        els.form.setAttribute("aria-busy", "true");
         els.analyzeButton.disabled = true;
         els.analyzeButton.setAttribute("aria-busy", "true");
         setState("loading");
@@ -164,6 +188,7 @@
             if (error instanceof ApiError && error.status === 503) pollReady();
         } finally {
             inFlight = false;
+            els.form.removeAttribute("aria-busy");
             els.analyzeButton.disabled = false;
             els.analyzeButton.removeAttribute("aria-busy");
         }
@@ -187,6 +212,7 @@
                 button.addEventListener("click", () => {
                     els.message.value = text;
                     updateCounter();
+                    autoResize();
                     analyze();
                 });
                 item.append(button);
@@ -209,7 +235,7 @@
         renderExamples();
         renderLanguageToggle();
         setStatus(view.statusKind);
-        if (view.result) renderResult(view.result);
+        if (view.result) renderResult(view.result, { animate: false });
         if (view.errorKey) renderError(view.errorKey);
     }
 
@@ -222,7 +248,10 @@
         event.preventDefault();
         analyze();
     });
-    els.message.addEventListener("input", updateCounter);
+    els.message.addEventListener("input", () => {
+        updateCounter();
+        autoResize();
+    });
     els.message.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
             event.preventDefault();
@@ -232,6 +261,7 @@
     els.clearButton.addEventListener("click", () => {
         els.message.value = "";
         updateCounter();
+        autoResize();
         view.result = null;
         view.errorKey = null;
         setState("idle");
