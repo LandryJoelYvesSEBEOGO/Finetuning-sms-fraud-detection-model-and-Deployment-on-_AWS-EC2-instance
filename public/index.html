@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Check whether an SMS message looks like a fraud attempt.">
+    <!-- Base URL of the API. Empty = same origin (Vercel, nginx). -->
+    <meta name="api-base" content="">
+    <title>SMS Fraud Detector</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#message" data-i18n="skip">Skip to the message field</a>
+
+    <header class="site-header">
+        <div class="container header-row">
+            <div class="brand">
+                <img src="favicon.svg" alt="" width="32" height="32">
+                <div>
+                    <h1 data-i18n="title">SMS Fraud Detector</h1>
+                    <p class="tagline" data-i18n="tagline">Paste a text message to estimate the risk of fraud.</p>
+                </div>
+            </div>
+            <div class="header-tools">
+                <span id="status" class="status status--pending" role="status">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    <span id="statusText" data-i18n="status.checking">Checking model…</span>
+                </span>
+                <button id="langToggle" class="lang-toggle" type="button" aria-label="Français">FR</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container layout">
+        <section class="card" aria-labelledby="analyzeTitle">
+            <h2 id="analyzeTitle" data-i18n="analyze.title">Analyze a message</h2>
+            <form id="analyzeForm" novalidate>
+                <label for="message" class="field-label" data-i18n="analyze.label">SMS message (English)</label>
+                <textarea id="message" name="message" rows="6" maxlength="2000"
+                          data-i18n-placeholder="analyze.placeholder"
+                          placeholder="e.g. Your parcel is on hold, pay the fee at…"
+                          aria-describedby="counter hint"></textarea>
+                <div class="field-meta">
+                    <span id="hint" data-i18n="analyze.hint">Ctrl + Enter to analyze</span>
+                    <span id="counter" aria-live="polite">0 / 2000</span>
+                </div>
+                <div class="actions">
+                    <button id="analyzeButton" class="button button--primary" type="submit">
+                        <span class="spinner" aria-hidden="true"></span>
+                        <span data-i18n="analyze.submit">Analyze</span>
+                    </button>
+                    <button id="clearButton" class="button button--ghost" type="button" data-i18n="analyze.clear">Clear</button>
+                </div>
+            </form>
+
+            <div class="examples">
+                <p class="examples-title" data-i18n="examples.title">Try an example</p>
+                <ul class="chips" id="examples"></ul>
+            </div>
+        </section>
+
+        <section class="card result" id="result" data-state="idle" aria-labelledby="resultTitle">
+            <h2 id="resultTitle" data-i18n="result.title">Result</h2>
+            <div id="resultBody" aria-live="polite">
+                <p class="result-idle" data-i18n="result.idle">The verdict will appear here.</p>
+
+                <div class="result-loading">
+                    <span class="spinner spinner--large" aria-hidden="true"></span>
+                    <span data-i18n="result.loading">Analyzing…</span>
+                </div>
+
+                <div class="result-error" role="alert">
+                    <p id="errorText"></p>
+                    <button id="retryButton" class="button button--ghost" type="button" data-i18n="result.retry">Try again</button>
+                </div>
+
+                <div class="result-verdict">
+                    <p class="verdict">
+                        <span class="verdict-icon" aria-hidden="true"></span>
+                        <span id="verdictText"></span>
+                    </p>
+                    <p id="verdictHelp" class="verdict-help"></p>
+
+                    <div class="meter" id="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-labelledby="scoreLabel">
+                        <div class="meter-fill" id="meterFill"></div>
+                        <div class="meter-threshold" id="meterThreshold"></div>
+                    </div>
+
+                    <dl class="details">
+                        <div><dt id="scoreLabel" data-i18n="result.score">Fraud score</dt><dd id="scoreValue"></dd></div>
+                        <div><dt data-i18n="result.threshold">Alert threshold</dt><dd id="thresholdValue"></dd></div>
+                        <div><dt data-i18n="result.latency">Analysis time</dt><dd id="latencyValue"></dd></div>
+                        <div><dt data-i18n="result.model">Model</dt><dd id="modelValue"></dd></div>
+                    </dl>
+                </div>
+            </div>
+        </section>
+
+        <aside class="notice" aria-labelledby="noticeTitle">
+            <h2 id="noticeTitle" data-i18n="notice.title">About this demo</h2>
+            <p data-i18n="notice.body">This is a proof of concept. The model (DistilBERT fine-tuned with LoRA on English SMS) can be wrong in both directions: never rely on it alone, and never share codes, passwords or bank details by SMS.</p>
+        </aside>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <a href="https://github.com/LandryJoelYvesSEBEOGO/Finetuning-sms-fraud-detection-model-and-Deployment-on-_AWS-EC2-instance" data-i18n="footer.source">Source code</a>
+            <span aria-hidden="true">·</span>
+            <a href="/docs" data-i18n="footer.api">API documentation</a>
+        </div>
+    </footer>
+
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
