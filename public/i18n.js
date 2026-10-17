@@ -48,9 +48,67 @@ window.I18N = (() => {
             "footer.source": "Source code",
             "footer.api": "API documentation",
         },
+        fr: {
+            name: "Français",
+            skip: "Aller au champ du message",
+            title: "Détecteur de fraude SMS",
+            tagline: "Collez un SMS pour estimer le risque de fraude.",
+            "status.pending": "Vérification du modèle…",
+            "status.checking": "Vérification du modèle…",
+            "status.ready": "Modèle prêt",
+            "status.warming": "Démarrage du modèle…",
+            "status.down": "Service indisponible",
+            "analyze.title": "Analyser un message",
+            "analyze.label": "Message SMS (en anglais)",
+            "analyze.placeholder": "ex. Your parcel is on hold, pay the fee at…",
+            "analyze.hint": "Ctrl + Entrée pour analyser",
+            "analyze.submit": "Analyser",
+            "analyze.clear": "Effacer",
+            "examples.title": "Essayer un exemple",
+            "examples.prize": "Faux gain",
+            "examples.bank": "Alerte bancaire",
+            "examples.lunch": "Déjeuner",
+            "examples.dentist": "Rappel de rendez-vous",
+            "result.title": "Résultat",
+            "result.idle": "Le verdict s'affichera ici.",
+            "result.loading": "Analyse en cours…",
+            "result.retry": "Réessayer",
+            "result.score": "Score de fraude",
+            "result.threshold": "Seuil d'alerte",
+            "result.latency": "Durée d'analyse",
+            "result.model": "Modèle",
+            "verdict.fraud": "Fraude probable",
+            "verdict.fraudHelp": "Ne cliquez sur aucun lien, n'appelez aucun numéro et ne communiquez aucune information personnelle.",
+            "verdict.legit": "Message légitime",
+            "verdict.legitHelp": "Aucun signe de fraude détecté. Restez vigilant face aux demandes inattendues.",
+            "error.empty": "Veuillez saisir un message à analyser.",
+            "error.invalid": "Le message doit contenir entre 1 et 2000 caractères.",
+            "error.warming": "Le modèle démarre. Réessayez dans quelques secondes.",
+            "error.rateLimited": "Trop de requêtes. Merci de patienter un instant.",
+            "error.timeout": "L'analyse a pris trop de temps. Veuillez réessayer.",
+            "error.server": "Le service d'analyse a renvoyé une erreur.",
+            "error.network": "Impossible de joindre le service d'analyse.",
+            "notice.title": "À propos de cette démo",
+            "notice.body": "Ceci est une preuve de concept. Le modèle (DistilBERT affiné avec LoRA sur des SMS en anglais) peut se tromper dans les deux sens : ne vous y fiez jamais seul, et ne communiquez jamais de code, de mot de passe ou de coordonnées bancaires par SMS.",
+            "footer.source": "Code source",
+            "footer.api": "Documentation de l'API",
+        },
     };
 
-    let lang = "en";
+    const STORAGE_KEY = "sms-fraud-lang";
+
+    function initialLanguage() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && messages[saved]) return saved;
+        } catch {
+            // Storage can be unavailable (private mode, blocked cookies).
+        }
+        const preferred = (navigator.languages ?? [navigator.language ?? "en"]).map((l) => l.slice(0, 2));
+        return preferred.find((l) => messages[l]) ?? "en";
+    }
+
+    let lang = initialLanguage();
 
     function t(key, vars = {}) {
         const template = messages[lang]?.[key] ?? messages.en[key] ?? key;
@@ -77,6 +135,11 @@ window.I18N = (() => {
         setLang(next) {
             if (messages[next]) {
                 lang = next;
+                try {
+                    localStorage.setItem(STORAGE_KEY, next);
+                } catch {
+                    // Not persisted: the choice still applies to this page.
+                }
                 apply();
             }
         },
