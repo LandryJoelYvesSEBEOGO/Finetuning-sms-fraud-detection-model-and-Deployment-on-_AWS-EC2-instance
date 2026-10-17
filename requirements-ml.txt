@@ -1,0 +1,9 @@
+# ML tooling: ONNX export, PyTorch reference backend and its tests.
+# Versions match the environment the LoRA adapter was trained with (PEFT 0.14).
+# Install torch from the CPU-only index first:
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch==2.5.1
+transformers==4.47.1
+peft==0.14.0
+onnx==1.17.0

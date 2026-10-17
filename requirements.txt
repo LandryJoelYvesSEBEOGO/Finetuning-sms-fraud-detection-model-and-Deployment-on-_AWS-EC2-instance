@@ -1,10 +1,8 @@
-# Runtime dependencies of the API.
-# Versions are aligned with the environment the LoRA adapter was trained with (PEFT 0.14).
-# In Docker/CI, torch is pre-installed from the CPU-only index:
-#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-torch==2.5.1
-transformers==4.47.1
-peft==0.14.0
+# Runtime dependencies of the API (deployed on Vercel: must stay well under
+# the 500 MB function bundle limit, so no torch/transformers here).
+onnxruntime==1.20.1
+tokenizers==0.21.0
+numpy==2.2.1
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.4
