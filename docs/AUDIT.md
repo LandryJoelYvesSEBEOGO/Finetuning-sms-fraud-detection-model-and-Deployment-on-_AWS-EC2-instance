@@ -148,6 +148,6 @@ Vercel
 |---|---|---|
 | ✅ **1. Fiabilisation backend** | Package `sms_fraud/`, contrat d'API `/v1` (label + score), validation, troncature, inférence non bloquante, `/health` et `/ready`, config par variables d'environnement, CORS restreint, stack Python 3.12 alignée sur l'entraînement, tests pytest, lint ruff, CI GitHub Actions | B1–B11, M4, M5, F1, I3, I6–I8 |
 | ~~2. ML reproductible~~ | **Hors périmètre** : le modèle publié est conservé tel quel (décision du 2026-10-17), le dataset ayant déjà été indexé par ailleurs | — |
-| **3. Inférence ONNX** | Fusion LoRA, export ONNX **fp32** (poids inchangés, pas de quantification), backend `onnx` de l'API, vérification de parité avec PyTorch, publication en release GitHub | Compatibilité Vercel, M6 |
-| **4. Frontend** | Nouvelle UI : verdict, jauge de confiance, exemples, états de chargement et d'erreur, accessibilité | F2–F6 |
+| ✅ **3. Inférence ONNX** | Fusion LoRA, export ONNX **fp32** (poids inchangés, pas de quantification), backend `onnx` de l'API, vérification de parité avec PyTorch, publication en release GitHub | Compatibilité Vercel, M6 |
+| **4. Frontend** | Nouvelle UI statique dans `public/` (servie par le CDN Vercel) : verdict, jauge de confiance avec seuil, exemples, états de chargement et d'erreur, statut du modèle, FR/EN, accessibilité, tests navigateur Playwright ; suppression d'`interface-web/` | F1–F6 |
 | **5. Déploiement Vercel** | `vercel.json`, fonction Python, déploiements de preview par PR, suppression de Docker/nginx/EC2, README fidèle | I1, I2, I4, I5, I9, doc |
