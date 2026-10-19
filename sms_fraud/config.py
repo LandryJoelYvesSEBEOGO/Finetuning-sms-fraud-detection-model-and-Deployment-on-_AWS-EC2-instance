@@ -12,8 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # GitHub release populated by the "Export ONNX model" workflow, tagged after
 # the adapter revision it was converted from.
 DEFAULT_ONNX_URL = (
-    "https://github.com/LandryJoelYvesSEBEOGO/"
-    "Finetuning-sms-fraud-detection-model-and-Deployment-on-_AWS-EC2-instance"
+    "https://github.com/LandryJoelYvesSEBEOGO/Sms_fraud_detection"
     "/releases/download/model-onnx-2cf2ba0"
 )
 
